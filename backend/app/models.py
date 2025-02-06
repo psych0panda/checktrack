@@ -1,6 +1,9 @@
 import uuid
-
-from pydantic import EmailStr
+from uuid import UUID
+from datetime import datetime
+from typing import Optional, Literal
+from decimal import Decimal
+from pydantic import EmailStr, BaseModel
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -43,7 +46,6 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
-    items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
 
 
 # Properties to return via API, id is always required
@@ -54,44 +56,6 @@ class UserPublic(UserBase):
 class UsersPublic(SQLModel):
     data: list[UserPublic]
     count: int
-
-
-# Shared properties
-class ItemBase(SQLModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=255)
-
-
-# Properties to receive on item creation
-class ItemCreate(ItemBase):
-    pass
-
-
-# Properties to receive on item update
-class ItemUpdate(ItemBase):
-    title: str | None = Field(default=None, min_length=1, max_length=255)  # type: ignore
-
-
-# Database model, database table inferred from class name
-class Item(ItemBase, table=True):
-    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    title: str = Field(max_length=255)
-    owner_id: uuid.UUID = Field(
-        foreign_key="user.id", nullable=False, ondelete="CASCADE"
-    )
-    owner: User | None = Relationship(back_populates="items")
-
-
-# Properties to return via API, id is always required
-class ItemPublic(ItemBase):
-    id: uuid.UUID
-    owner_id: uuid.UUID
-
-
-class ItemsPublic(SQLModel):
-    data: list[ItemPublic]
-    count: int
-
 
 # Generic message
 class Message(SQLModel):
@@ -112,3 +76,119 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=40)
+
+
+class InvoicePublic(SQLModel):
+    id: UUID
+    serial_number: str
+    user_id: UUID
+    total_amount: float
+    date_of_issue: datetime
+    payment_id: Optional[UUID]
+
+    class Config:
+        orm_mode = True
+
+
+class InvoicesPublic(SQLModel):
+    data: list[InvoicePublic]
+    count: int
+
+class InvoiceProducts(SQLModel, table=True):
+    invoice_id: UUID = Field(foreign_key="invoice.id", primary_key=True)
+    product_id: UUID = Field(foreign_key="product.id", primary_key=True)
+
+
+class InvoiceBase(SQLModel, table=False):
+    id: UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    title: str = Field(max_length=255)
+    owner_id: UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    owner: User | None = Relationship(back_populates="invoice")
+
+
+class InvoiceUpdate(InvoiceBase):
+    title: str | None = Field(default=None, min_length=1, max_length=255)  # type: ignore
+
+
+class Payment(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    type: str = Field(max_length=255)
+    amount: float = Field(default=0)
+    rest: float = Field(default=0)
+    status: str = Field(max_length=255, default="pending")
+    product_id: UUID | None = Field(default=None, foreign_key="product.id")
+    product: Optional["Product"] = Relationship(back_populates="payments")
+    invoice: Optional["Invoice"] = Relationship(back_populates="payment")
+
+
+class Product(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    title: str = Field(max_length=255)
+    price: float = Field(default=0)
+    stock: int = Field(default=0)
+    summary: str | None = Field(max_length=255)
+    # Прямая связь с Invoice (один к многим)
+    invoice_id: Optional[UUID] = Field(default=None, foreign_key="invoice.id", nullable=True, ondelete="CASCADE")
+    # Связь с платежами:
+    payments: list[Payment] = Relationship(back_populates="product")
+
+
+class Invoice(SQLModel, table=True):
+    id: UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    serial_number: str = Field(max_length=255)
+    user_id: UUID = Field(foreign_key="user.id", nullable=False, ondelete="CASCADE")
+    total_amount: float = Field(default=0)
+    rest: float = Field(default=0)
+    date_of_issue: datetime = Field(default_factory=datetime.now)
+    payment_id: UUID | None = Field(default=None, foreign_key="payment.id")
+    payment: Payment | None = Relationship(back_populates="invoice")
+    # Если требуется связь "Invoice → Product" через промежуточную таблицу:
+    products: list[Product] = Relationship(link_model=InvoiceProducts)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ProductCreateRequest(BaseModel):
+    name: str
+    price: Decimal
+    stock: int
+
+
+class PaymentCreateRequest(BaseModel):
+    type: Literal["cash", "cashless"]
+    amount: Decimal
+
+
+class InvoiceCreateRequest(BaseModel):
+    products: list[ProductCreateRequest]
+    payment: PaymentCreateRequest
+
+
+class ProductResponse(BaseModel):
+    name: str
+    price: Decimal
+    stock: int
+    total: Decimal
+    rest: Decimal
+    
+    class Config:
+        orm_mode = True
+
+
+class PaymentResponse(BaseModel):
+    type: Literal["cash", "cashless"]
+    amount: Decimal
+
+    class Config:
+        orm_mode = True
+
+
+class InvoiceResponse(BaseModel):
+    id: UUID
+    products: list[ProductResponse]
+    payment: Optional[PaymentResponse]  # Сделать поле опциональным
+    total_amount: Decimal       # Общая сумма накладной
+    rest: Decimal        # Остаток (например, сдача)
+    created_at: datetime
+
+    class Config:
+        orm_mode = True

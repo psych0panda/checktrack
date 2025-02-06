@@ -1,4 +1,5 @@
 import logging
+from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,6 +21,10 @@ logger = logging.getLogger(__name__)
 class EmailData:
     html_content: str
     subject: str
+
+def generate_invoice_serial_number() -> str:
+    # TODO: simple stub, need implement real serial number generation
+    return "INV-" + str(uuid4())[:8].upper()
 
 
 def render_email_template(*, template_name: str, context: dict[str, Any]) -> str:
