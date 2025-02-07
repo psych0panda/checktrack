@@ -15,53 +15,53 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect } from "react"
 import { z } from "zod"
 
-import { ItemsService } from "../../client"
-import ActionsMenu from "../../components/Common/ActionsMenu"
-import Navbar from "../../components/Common/Navbar"
-import AddItem from "../../components/Items/AddItem"
+import { ItemsService } from "../../client/index.ts"
+import ActionsMenu from "../../components/Common/ActionsMenu.tsx"
+import Navbar from "../../components/Common/Navbar.tsx"
+import AddInvoice from "../../components/Invoices/AddItem.tsx"
 import { PaginationFooter } from "../../components/Common/PaginationFooter.tsx"
 
-const itemsSearchSchema = z.object({
+const invoiceSearchSchema = z.object({
   page: z.number().catch(1),
 })
 
-export const Route = createFileRoute("/_layout/items")({
-  component: Items,
-  validateSearch: (search) => itemsSearchSchema.parse(search),
+export const Route = createFileRoute("/_layout/invoice")({
+  component: Invoice,
+  validateSearch: (search) => invoiceSearchSchema.parse(search),
 })
 
 const PER_PAGE = 5
 
-function getItemsQueryOptions({ page }: { page: number }) {
+function getInvoiceQueryOptions({ page }: { page: number }) {
   return {
     queryFn: () =>
-      ItemsService.readItems({ skip: (page - 1) * PER_PAGE, limit: PER_PAGE }),
-    queryKey: ["items", { page }],
+      ItemsService.readInvoices({ skip: (page - 1) * PER_PAGE, limit: PER_PAGE }),
+    queryKey: ["invoices", { page }],
   }
 }
 
-function ItemsTable() {
+function InvoiceTable() {
   const queryClient = useQueryClient()
   const { page } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const setPage = (page: number) =>
-    navigate({ search: (prev: {[key: string]: string}) => ({ ...prev, page }) })
+    navigate({ search: (prev: { [key: string]: string }) => ({ ...prev, page }) })
 
   const {
-    data: items,
+    data: invoices,
     isPending,
     isPlaceholderData,
   } = useQuery({
-    ...getItemsQueryOptions({ page }),
+    ...getInvoiceQueryOptions({ page }),
     placeholderData: (prevData) => prevData,
   })
 
-  const hasNextPage = !isPlaceholderData && items?.data.length === PER_PAGE
+  const hasNextPage = !isPlaceholderData && invoices?.data.length === PER_PAGE
   const hasPreviousPage = page > 1
 
   useEffect(() => {
     if (hasNextPage) {
-      queryClient.prefetchQuery(getItemsQueryOptions({ page: page + 1 }))
+      queryClient.prefetchQuery(getInvoiceQueryOptions({ page: page + 1 }))
     }
   }, [page, queryClient, hasNextPage])
 
@@ -72,9 +72,11 @@ function ItemsTable() {
           <Thead>
             <Tr>
               <Th>ID</Th>
-              <Th>Title</Th>
-              <Th>Description</Th>
-              <Th>Actions</Th>
+              <Th>Serial</Th>
+              <Th>User</Th>
+              <Th>Total Amount</Th>
+              <Th>Date of issue</Th>
+              <Th>Linked Pay</Th>
             </Tr>
           </Thead>
           {isPending ? (
@@ -89,21 +91,21 @@ function ItemsTable() {
             </Tbody>
           ) : (
             <Tbody>
-              {items?.data.map((item) => (
-                <Tr key={item.id} opacity={isPlaceholderData ? 0.5 : 1}>
-                  <Td>{item.id}</Td>
+              {invoices?.data.map((invoice) => (
+                <Tr key={invoice.id} opacity={isPlaceholderData ? 0.5 : 1}>
+                  <Td>{invoice.id}</Td>
                   <Td isTruncated maxWidth="150px">
-                    {item.title}
+                    {invoice.serial_number}
                   </Td>
                   <Td
-                    color={!item.description ? "ui.dim" : "inherit"}
+                    color={!invoice.user_id ? "ui.dim" : "inherit"}
                     isTruncated
                     maxWidth="150px"
                   >
-                    {item.description || "N/A"}
+                    {invoice.payment_id || "N/A"}
                   </Td>
                   <Td>
-                    <ActionsMenu type={"Item"} value={item} />
+                    <ActionsMenu type={"Invoice"} value={invoice} />
                   </Td>
                 </Tr>
               ))}
@@ -121,15 +123,15 @@ function ItemsTable() {
   )
 }
 
-function Items() {
+function Invocies() {
   return (
     <Container maxW="full">
       <Heading size="lg" textAlign={{ base: "center", md: "left" }} pt={12}>
-        Items Management
+      Invocie Management
       </Heading>
 
-      <Navbar type={"Item"} addModalAs={AddItem} />
-      <ItemsTable />
+      <Navbar type={"Invoice"} addModalAs={AddInvoice} />
+      <InvoiceTable />
     </Container>
   )
 }
