@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import col, delete, func, select
+from sqlmodel import func, select
 
 from app import crud
 from app.api.deps import (
@@ -133,7 +133,7 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
-    session.exec(statement)  # type: ignore
+    session.exec(statement)  # noqa
     session.delete(current_user)
     session.commit()
     return Message(message="User deleted successfully")
@@ -219,7 +219,7 @@ def delete_user(
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
-    session.exec(statement)  # type: ignore
+    session.exec(statement)  # noqa
     session.delete(user)
     session.commit()
     return Message(message="User deleted successfully")

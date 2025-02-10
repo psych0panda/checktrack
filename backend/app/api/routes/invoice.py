@@ -1,23 +1,30 @@
 import io
 import uuid
-from typing import Any, Optional
 from datetime import datetime
-from fastapi.responses import PlainTextResponse, StreamingResponse
-from fastapi import APIRouter, HTTPException, Query
-from sqlmodel import func, select
-from jinja2 import Environment, FileSystemLoader
-import uuid
 from typing import Any
-from weasyprint import HTML
-from app.models import Invoice, Product, Payment
 
-from app.utils import generate_invoice_serial_number
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse, StreamingResponse
+from jinja2 import Environment, FileSystemLoader
+from sqlmodel import func, select
+from weasyprint import HTML
+
 from app.api.deps import CurrentUser, SessionDep
-from app.models import Invoice, InvoicePublic, InvoiceCreateRequest, Message, InvoicesPublic, InvoiceResponse, Product, Payment
+from app.models import (
+    Invoice,
+    InvoiceCreateRequest,
+    InvoicePublic,
+    InvoiceResponse,
+    InvoicesPublic,
+    Message,
+    Payment,
+    Product,
+)
+from app.utils import generate_invoice_serial_number
 
 router = APIRouter(prefix="/invoice", tags=["invoice"])
 
-template_dir = 'app/templates'
+template_dir = "app/templates"
 file_loader = FileSystemLoader(template_dir)
 env = Environment(loader=file_loader)
 
@@ -28,12 +35,15 @@ def read_invoices(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
-    from_date: Optional[datetime] = Query(
-        None, description="Отфильтровать чеки, созданные не ранее указанной даты"),
-    min_total: Optional[float] = Query(
-        None, description="Показать чеки с суммой покупки не меньшей"),
-    payment_type: Optional[str] = Query(
-        None, description="Показать чеки с определённым типом оплаты (cash / cashless)"),
+    from_date: datetime | None = Query(
+        None, description="Отфильтровать чеки, созданные не ранее указанной даты"
+    ),
+    min_total: float | None = Query(
+        None, description="Показать чеки с суммой покупки не меньшей"
+    ),
+    payment_type: str | None = Query(
+        None, description="Показать чеки с определённым типом оплаты (cash / cashless)"
+    ),
 ) -> InvoicesPublic:
     """
     Получить список накладных.
@@ -103,8 +113,9 @@ def read_invoice(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) 
 
 
 @router.post("/", response_model=InvoiceResponse)
-def create_invoice(session: SessionDep, current_user: CurrentUser, invoice_in: InvoiceCreateRequest
-                   ) -> Any:
+def create_invoice(
+    session: SessionDep, current_user: CurrentUser, invoice_in: InvoiceCreateRequest
+) -> Any:
     """
     Create new invoice.
     Args:
@@ -116,21 +127,18 @@ def create_invoice(session: SessionDep, current_user: CurrentUser, invoice_in: I
     serial_number = generate_invoice_serial_number()
 
     # Создаем накладную базового уровня. Поля total и rest можно вычислить позже.
-    invoice = Invoice(serial_number=serial_number,
-                      user_id=user_id, total_amount=0)
+    invoice = Invoice(serial_number=serial_number, user_id=user_id, total_amount=0)
     session.add(invoice)
     session.commit()
     session.refresh(invoice)
 
-    products = session.query(Product).filter(
-        Product.invoice_id == invoice.id).all()
+    products = session.query(Product).filter(Product.invoice_id == invoice.id).all()
     # Обработка продуктов: создаем объекты Product для каждого элемента из invoice_in.products
     total = 0
     rest = 0
     products = []
     if rest > invoice_in.payment.amount:
-        raise HTTPException(
-            status_code=400, detail="Not enough payment amount")
+        raise HTTPException(status_code=400, detail="Not enough payment amount")
     for prod in invoice_in.products:
         product_total = prod.price * prod.stock
         total += product_total
@@ -141,20 +149,21 @@ def create_invoice(session: SessionDep, current_user: CurrentUser, invoice_in: I
             price=prod.price,
             stock=prod.stock,
             total=product_total,  # Если поле total предусмотрено в модели Product
-            summary=product_total
+            summary=product_total,
         )
         session.add(product)
         products.append(product)
 
     # Обработка платежа: создаем объект Payment
-    rest = invoice_in.payment.amount - \
-        total if invoice_in.payment.amount >= total else 0
-    for prod in products:
+    rest = (
+        invoice_in.payment.amount - total if invoice_in.payment.amount >= total else 0
+    )
+    for _ in products:
         payment = Payment(
             invoice_id=invoice.id,
             type=invoice_in.payment.type,
             amount=invoice_in.payment.amount,
-            rest=rest
+            rest=rest,
         )
         session.add(payment)
         session.commit()
@@ -199,7 +208,7 @@ def generate_receipt_text(invoice: Invoice, products: Product, width: int) -> st
     Args:
         invoice (Invoice): накладная
         products (Product): список продуктов
-        width (int): количество символов в строке   
+        width (int): количество символов в строке
     Returns:
         str: текст чека
     """
@@ -220,13 +229,11 @@ def generate_receipt_text(invoice: Invoice, products: Product, width: int) -> st
     # - stock: количество (тип float),
     # - price: цену за единицу (float)
     # Вычисляем итог для каждой позиции: total = stock * price.
-    total_products_amount = sum(
-        product.price * product.stock for product in products)
+    total_products_amount = sum(product.price * product.stock for product in products)
 
     # Проверяем, хватает ли уплаченных средств
     if invoice.total_amount < total_products_amount:
-        raise HTTPException(
-            status_code=400, detail="Not enough payment amount")
+        raise HTTPException(status_code=400, detail="Not enough payment amount")
     rest = invoice.total_amount - total_products_amount
     for prod in products:
         total_value = prod.price * prod.stock
@@ -241,12 +248,14 @@ def generate_receipt_text(invoice: Invoice, products: Product, width: int) -> st
 
     # Детали оплаты и чека
     lines.append(divider)
-    lines.append(f"СУМА".ljust(width-10) + f"{total_products_amount:>10.2f}")
+    lines.append("СУМА".ljust(width - 10) + f"{total_products_amount:>10.2f}")
     # Если имеется информация про оплату, выводим её тип и сумму
     if invoice.payment:
-        lines.append(f"{invoice.payment.type}".ljust(
-            width-10) + f"{invoice.total_amount:>10.2f}")
-    lines.append(f"РЕШТА".ljust(width-10) + f"{rest:>10.2f}")
+        lines.append(
+            f"{invoice.payment.type}".ljust(width - 10)
+            + f"{invoice.total_amount:>10.2f}"
+        )
+    lines.append("РЕШТА".ljust(width - 10) + f"{rest:>10.2f}")
     lines.append(divider)
 
     # Дата создания чека и сообщение
@@ -275,19 +284,16 @@ def print_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     products = session.exec(
-        select(Product)
-        .where(Product.invoice_id == invoice.id)
+        select(Product).where(Product.invoice_id == invoice.id)
     ).all()
 
-    total_products_amount = sum(
-        product.price * product.stock for product in products)
+    total_products_amount = sum(product.price * product.stock for product in products)
     if invoice.total_amount < total_products_amount:
-        raise HTTPException(
-            status_code=400, detail="Not enough payment amount")
+        raise HTTPException(status_code=400, detail="Not enough payment amount")
     rest = invoice.total_amount - total_products_amount
 
     # Загрузка шаблона
-    template = env.get_template('receipt_template.txt')
+    template = env.get_template("receipt_template.txt")
 
     # Данные для шаблона
     data = {
@@ -298,7 +304,7 @@ def print_invoice(
         "products": products,
         "total_products_amount": total_products_amount,
         "rest": rest,
-        "width": width
+        "width": width,
     }
 
     # Рендеринг шаблона
@@ -326,19 +332,16 @@ def print_invoice_pdf(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     products = session.exec(
-        select(Product)
-        .where(Product.invoice_id == invoice.id)
+        select(Product).where(Product.invoice_id == invoice.id)
     ).all()
 
-    total_products_amount = sum(
-        product.price * product.stock for product in products)
+    total_products_amount = sum(product.price * product.stock for product in products)
     if invoice.total_amount < total_products_amount:
-        raise HTTPException(
-            status_code=400, detail="Not enough payment amount")
+        raise HTTPException(status_code=400, detail="Not enough payment amount")
     rest = invoice.total_amount - total_products_amount
 
     # Загрузка шаблона
-    template = env.get_template('receipt_template.html')
+    template = env.get_template("receipt_template.html")
 
     # Данные для шаблона
     data = {
@@ -349,7 +352,7 @@ def print_invoice_pdf(
         "products": products,
         "total_products_amount": total_products_amount,
         "rest": rest,
-        "width": width
+        "width": width,
     }
 
     # Рендеринг шаблона
@@ -360,6 +363,8 @@ def print_invoice_pdf(
 
     # Возвращаем PDF файл для скачивания
     headers = {
-        'Content-Disposition': f'attachment; filename="invoice_{invoice.serial_number}.pdf"'
+        "Content-Disposition": f'attachment; filename="invoice_{invoice.serial_number}.pdf"'
     }
-    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers=headers)
+    return StreamingResponse(
+        io.BytesIO(pdf), media_type="application/pdf", headers=headers
+    )

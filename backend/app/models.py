@@ -1,9 +1,10 @@
 import uuid
-from uuid import UUID
 from datetime import datetime
-from typing import Optional, Literal
 from decimal import Decimal
-from pydantic import EmailStr, BaseModel
+from typing import Literal, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, EmailStr
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -57,6 +58,7 @@ class UsersPublic(SQLModel):
     data: list[UserPublic]
     count: int
 
+
 # Generic message
 class Message(SQLModel):
     message: str
@@ -84,7 +86,7 @@ class InvoicePublic(SQLModel):
     user_id: UUID
     total_amount: float
     date_of_issue: datetime
-    payment_id: Optional[UUID]
+    payment_id: UUID | None
 
     class Config:
         orm_mode = True
@@ -93,6 +95,7 @@ class InvoicePublic(SQLModel):
 class InvoicesPublic(SQLModel):
     data: list[InvoicePublic]
     count: int
+
 
 class InvoiceProducts(SQLModel, table=True):
     invoice_id: UUID = Field(foreign_key="invoice.id", primary_key=True)
@@ -128,7 +131,9 @@ class Product(SQLModel, table=True):
     stock: int = Field(default=0)
     summary: str | None = Field(max_length=255)
     # Прямая связь с Invoice (один к многим)
-    invoice_id: Optional[UUID] = Field(default=None, foreign_key="invoice.id", nullable=True, ondelete="CASCADE")
+    invoice_id: UUID | None = Field(
+        default=None, foreign_key="invoice.id", nullable=True, ondelete="CASCADE"
+    )
     # Связь с платежами:
     payments: list[Payment] = Relationship(back_populates="product")
 
@@ -169,7 +174,7 @@ class ProductResponse(BaseModel):
     stock: int
     total: Decimal
     rest: Decimal
-    
+
     class Config:
         orm_mode = True
 
@@ -185,9 +190,9 @@ class PaymentResponse(BaseModel):
 class InvoiceResponse(BaseModel):
     id: UUID
     products: list[ProductResponse]
-    payment: Optional[PaymentResponse]  # Сделать поле опциональным
-    total_amount: Decimal       # Общая сумма накладной
-    rest: Decimal        # Остаток (например, сдача)
+    payment: PaymentResponse | None  # Сделать поле опциональным
+    total_amount: Decimal  # Общая сумма накладной
+    rest: Decimal  # Остаток (например, сдача)
     created_at: datetime
 
     class Config:

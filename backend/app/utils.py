@@ -1,9 +1,9 @@
 import logging
-from uuid import uuid4
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import emails  # type: ignore
 import jwt
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class EmailData:
     html_content: str
     subject: str
+
 
 def generate_invoice_serial_number() -> str:
     # TODO: simple stub, need implement real serial number generation

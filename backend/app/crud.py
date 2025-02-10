@@ -1,4 +1,3 @@
-import uuid
 from typing import Any
 
 from sqlmodel import Session, select
@@ -44,4 +43,3 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
     if not verify_password(password, db_user.hashed_password):
         return None
     return db_user
-

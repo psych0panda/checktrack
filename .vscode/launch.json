@@ -16,6 +16,7 @@
             "cwd": "${workspaceFolder}/backend",
             "jinja": true,
             "envFile": "${workspaceFolder}/.env",
+            "python": "app/backend/.venv/bin/python"
         },
         {
             "type": "chrome",
@@ -24,5 +25,21 @@
             "url": "http://localhost:5173",
             "webRoot": "${workspaceFolder}/frontend"
         },
+        {
+            "name": "Debug Pytest Tests",
+            "type": "python",
+            "request": "launch",
+            "python": "app/backend/.venv/bin/python",
+            "program": "${workspaceFolder}/backend/.venv/bin/pytest",
+            "args": [
+                "--maxfail=1",
+                "--disable-warnings",
+                "-s"
+            ],
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}/backend",
+            "justMyCode": true
+        }
     ]
 }
