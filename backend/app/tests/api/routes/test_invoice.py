@@ -14,7 +14,7 @@ client = TestClient(app)
 
 def test_read_invoices(client: TestClient, superuser_token_headers: dict[str, str], db: Session):
     # Создаем тестового пользователя с уникальным email
-    user = User(id=uuid.uuid4(), email=random_email(), hashed_password=get_password_hash("password"))
+    user = User(id=uuid.uuid4(), email=random_email(), hashed_password=get_password_hash("password"), is_superuser=False, is_active=True)
     db.add(user)
     db.commit()
 
@@ -35,6 +35,37 @@ def test_read_invoices(client: TestClient, superuser_token_headers: dict[str, st
          headers=superuser_token_headers,
      )
     assert response.status_code == 200
+    assert response.json()["id"] == str(invoice.id)
+    assert response.json()["serial_number"] == invoice.serial_number
+    assert response.json()["total_amount"] == invoice.total_amount
+
+
+    # Удаляем связь накладной с пользователем
+    db.delete(invoice)
+    db.commit()
+    db.delete(user)
+    db.commit()
+
+def test_read_invoice_unauthorized(client: TestClient, db: Session):
+    # Создаем тестового пользователя с уникальным email
+    user = User(id=uuid.uuid4(), email=random_email(), hashed_password=get_password_hash("password"), is_superuser=False, is_active=True)
+    db.add(user)
+    db.commit()
+
+    # Создаем тестовую накладную
+    invoice = Invoice(
+        id=uuid.uuid4(),
+        serial_number="INV-001",
+        user_id=user.id,
+        total_amount=100.0,
+        date_of_issue=datetime.now()
+    )
+    db.add(invoice)
+    db.commit()
+
+    # Тестируем получение накладной анонимным пользователем
+    response = client.get(f"{settings.API_V1_STR}/invoice/{invoice.id}")
+    assert response.status_code == 401  # Ожидаем, что анонимный пользователь получит ошибку 401 Unauthorized
 
     # Удаляем связь накладной с пользователем
     db.delete(invoice)
@@ -111,6 +142,7 @@ def test_read_invoices_with_filters(client: TestClient, superuser_token_headers:
          headers=superuser_token_headers,
      )
     assert response.status_code == 200
+    assert response.json() == {'data': [], 'count': 0}
 
 
     # Тестируем получение накладных с фильтром по общей сумме
@@ -120,6 +152,8 @@ def test_read_invoices_with_filters(client: TestClient, superuser_token_headers:
          headers=superuser_token_headers,
      )
     assert response.status_code == 200
+    for inv in response.json()['data']:
+        assert inv["total_amount"] >= 50.0
 
     # Тестируем получение накладных с фильтром по типу оплаты
     response = client.get(
@@ -128,6 +162,8 @@ def test_read_invoices_with_filters(client: TestClient, superuser_token_headers:
          headers=superuser_token_headers,
      )
     assert response.status_code == 200
+    for inv in response.json()['data']:
+        assert inv["payment_type"] == "cash"
 
 
 def test_delete_invoice(client: TestClient, superuser_token_headers: dict[str, str], db: Session):
