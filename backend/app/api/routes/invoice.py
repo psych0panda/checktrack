@@ -1,15 +1,25 @@
+import io
 import uuid
 from typing import Any, Optional
 from datetime import datetime
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import func, select
+from jinja2 import Environment, FileSystemLoader
+import uuid
+from typing import Any
+from weasyprint import HTML
+from app.models import Invoice, Product, Payment
 
 from app.utils import generate_invoice_serial_number
 from app.api.deps import CurrentUser, SessionDep
-from app.models import Invoice, InvoicePublic, InvoiceCreateRequest, InvoiceUpdate, Message, InvoicesPublic, InvoiceResponse, Product, Payment
+from app.models import Invoice, InvoicePublic, InvoiceCreateRequest, Message, InvoicesPublic, InvoiceResponse, Product, Payment
 
 router = APIRouter(prefix="/invoice", tags=["invoice"])
+
+template_dir = 'app/templates'
+file_loader = FileSystemLoader(template_dir)
+env = Environment(loader=file_loader)
 
 
 @router.get("/", response_model=InvoicesPublic)
@@ -18,9 +28,12 @@ def read_invoices(
     current_user: CurrentUser,
     skip: int = 0,
     limit: int = 100,
-    from_date: Optional[datetime] = Query(None, description="Отфильтровать чеки, созданные не ранее указанной даты"),
-    min_total: Optional[float] = Query(None, description="Показать чеки с суммой покупки не меньшей"),
-    payment_type: Optional[str] = Query(None, description="Показать чеки с определённым типом оплаты (cash / cashless)"),
+    from_date: Optional[datetime] = Query(
+        None, description="Отфильтровать чеки, созданные не ранее указанной даты"),
+    min_total: Optional[float] = Query(
+        None, description="Показать чеки с суммой покупки не меньшей"),
+    payment_type: Optional[str] = Query(
+        None, description="Показать чеки с определённым типом оплаты (cash / cashless)"),
 ) -> InvoicesPublic:
     """
     Получить список накладных.
@@ -32,7 +45,7 @@ def read_invoices(
         payment_type (str): фильтр по типу оплаты
     Returns:
         InvoicesPublic: список накладных
-        
+
     """
     filters = []
 
@@ -91,7 +104,7 @@ def read_invoice(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) 
 
 @router.post("/", response_model=InvoiceResponse)
 def create_invoice(session: SessionDep, current_user: CurrentUser, invoice_in: InvoiceCreateRequest
-) -> Any:
+                   ) -> Any:
     """
     Create new invoice.
     Args:
@@ -103,18 +116,21 @@ def create_invoice(session: SessionDep, current_user: CurrentUser, invoice_in: I
     serial_number = generate_invoice_serial_number()
 
     # Создаем накладную базового уровня. Поля total и rest можно вычислить позже.
-    invoice = Invoice(serial_number=serial_number, user_id=user_id, total_amount=0)
+    invoice = Invoice(serial_number=serial_number,
+                      user_id=user_id, total_amount=0)
     session.add(invoice)
     session.commit()
     session.refresh(invoice)
 
-    products = session.query(Product).filter(Product.invoice_id == invoice.id).all()
+    products = session.query(Product).filter(
+        Product.invoice_id == invoice.id).all()
     # Обработка продуктов: создаем объекты Product для каждого элемента из invoice_in.products
     total = 0
     rest = 0
     products = []
     if rest > invoice_in.payment.amount:
-        raise HTTPException(status_code=400, detail="Not enough payment amount")
+        raise HTTPException(
+            status_code=400, detail="Not enough payment amount")
     for prod in invoice_in.products:
         product_total = prod.price * prod.stock
         total += product_total
@@ -131,7 +147,8 @@ def create_invoice(session: SessionDep, current_user: CurrentUser, invoice_in: I
         products.append(product)
 
     # Обработка платежа: создаем объект Payment
-    rest = invoice_in.payment.amount - total if invoice_in.payment.amount >= total else 0
+    rest = invoice_in.payment.amount - \
+        total if invoice_in.payment.amount >= total else 0
     for prod in products:
         payment = Payment(
             invoice_id=invoice.id,
@@ -175,6 +192,7 @@ def delete_invoice(
     session.commit()
     return Message(message="Invoice deleted successfully")
 
+
 def generate_receipt_text(invoice: Invoice, products: Product, width: int) -> str:
     """
     Генерация текста чека.
@@ -190,23 +208,25 @@ def generate_receipt_text(invoice: Invoice, products: Product, width: int) -> st
     divider = "=" * width
     sub_divider = "-" * width
     lines = []
-    
+
     # Заголовок
     lines.append(shop_name.center(width))
     lines.append(divider)
     lines.append(f"ЧЕК №{invoice.serial_number}".center(width))
     lines.append(divider)
-    
+
     # Проходим по списку продуктов, предполагая, что каждый продукт имеет:
     # - title: название,
     # - stock: количество (тип float),
     # - price: цену за единицу (float)
     # Вычисляем итог для каждой позиции: total = stock * price.
-    total_products_amount = sum(product.price * product.stock for product in products)
+    total_products_amount = sum(
+        product.price * product.stock for product in products)
 
     # Проверяем, хватает ли уплаченных средств
     if invoice.total_amount < total_products_amount:
-        raise HTTPException(status_code=400, detail="Not enough payment amount")
+        raise HTTPException(
+            status_code=400, detail="Not enough payment amount")
     rest = invoice.total_amount - total_products_amount
     for prod in products:
         total_value = prod.price * prod.stock
@@ -218,23 +238,25 @@ def generate_receipt_text(invoice: Invoice, products: Product, width: int) -> st
         lines.append(line1)
         lines.append(line2)
         lines.append(sub_divider)
-    
+
     # Детали оплаты и чека
     lines.append(divider)
     lines.append(f"СУМА".ljust(width-10) + f"{total_products_amount:>10.2f}")
     # Если имеется информация про оплату, выводим её тип и сумму
     if invoice.payment:
-        lines.append(f"{invoice.payment.type}".ljust(width-10) + f"{invoice.total_amount:>10.2f}")
+        lines.append(f"{invoice.payment.type}".ljust(
+            width-10) + f"{invoice.total_amount:>10.2f}")
     lines.append(f"РЕШТА".ljust(width-10) + f"{rest:>10.2f}")
     lines.append(divider)
-    
+
     # Дата создания чека и сообщение
     date_line = invoice.date_of_issue.strftime("%d.%m.%Y %H:%M")
     lines.append(date_line.center(width))
     lines.append("Дякуємо за покупку!".center(width))
     return "\n".join(lines)
 
-@router.get("/{id}/print", response_class=PlainTextResponse)
+
+@router.get("/{id}/print", response_class=PlainTextResponse, response_model=None)
 def print_invoice(
     id: uuid.UUID,
     session: SessionDep,
@@ -249,20 +271,95 @@ def print_invoice(
         str: текст чека
     """
     invoice = session.get(Invoice, id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
     products = session.exec(
         select(Product)
-        .join(Invoice, Product.invoice_id == Invoice.id)
-        .where(Payment.id == invoice.payment_id)
+        .where(Product.invoice_id == invoice.id)
     ).all()
-    # Подсчитываем общую сумму продуктов
-    
-    total_products_amount = sum(product.price * product.stock for product in products)
 
-    # Проверяем, хватает ли уплаченных средств
+    total_products_amount = sum(
+        product.price * product.stock for product in products)
     if invoice.total_amount < total_products_amount:
-        raise HTTPException(status_code=400, detail="Not enough payment amount")
+        raise HTTPException(
+            status_code=400, detail="Not enough payment amount")
     rest = invoice.total_amount - total_products_amount
-    invoice.rest = rest
-    session.add(invoice)
-    session.commit()
-    return generate_receipt_text(invoice, products, width)
+
+    # Загрузка шаблона
+    template = env.get_template('receipt_template.txt')
+
+    # Данные для шаблона
+    data = {
+        "shop_name": "ФОП Джонсонюк Борис",
+        "divider": "=" * width,
+        "sub_divider": "-" * width,
+        "invoice": invoice,
+        "products": products,
+        "total_products_amount": total_products_amount,
+        "rest": rest,
+        "width": width
+    }
+
+    # Рендеринг шаблона
+    receipt_text = template.render(data)
+
+    return receipt_text
+
+
+@router.get("/{id}/print/pdf", response_class=StreamingResponse)
+def print_invoice_pdf(
+    id: uuid.UUID,
+    session: SessionDep,
+    width: int = Query(40, description="Кількість символів у рядку"),
+) -> StreamingResponse:
+    """
+    Распечатка чек в формате PDF.
+    Args:
+        id (uuid.UUID): ID накладной
+        width (int): количество символов в строке
+    Returns:
+        StreamingResponse: PDF файл чека
+    """
+    invoice = session.get(Invoice, id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    products = session.exec(
+        select(Product)
+        .where(Product.invoice_id == invoice.id)
+    ).all()
+
+    total_products_amount = sum(
+        product.price * product.stock for product in products)
+    if invoice.total_amount < total_products_amount:
+        raise HTTPException(
+            status_code=400, detail="Not enough payment amount")
+    rest = invoice.total_amount - total_products_amount
+
+    # Загрузка шаблона
+    template = env.get_template('receipt_template.html')
+
+    # Данные для шаблона
+    data = {
+        "shop_name": "ФОП Джонсонюк Борис",
+        "divider": "=" * width,
+        "sub_divider": "-" * width,
+        "invoice": invoice,
+        "products": products,
+        "total_products_amount": total_products_amount,
+        "rest": rest,
+        "width": width
+    }
+
+    # Рендеринг шаблона
+    receipt_html = template.render(data)
+
+    # Генерация PDF
+    pdf = HTML(string=receipt_html).write_pdf()
+
+    # Возвращаем PDF файл для скачивания
+    headers = {
+        'Content-Disposition': f'attachment; filename="invoice_{invoice.serial_number}.pdf"'
+    }
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers=headers)

@@ -1,0 +1,18 @@
+{{ shop_name.center(width) }}
+{{ divider }}
+ЧЕК №{{ invoice.serial_number }}
+{{ divider }}
+{% for product in products %}
+{{ product.stock }} x {{ product.price }} = {{ product.stock * product.price }}
+{{ product.title }}
+{{ sub_divider }}
+{% endfor %}
+{{ divider }}
+СУМА: {{ total_products_amount }}
+{% if invoice.payment %}
+{{ invoice.payment.type }}: {{ invoice.total_amount }}
+{% endif %}
+РЕШТА: {{ rest }}
+{{ divider }}
+{{ invoice.date_of_issue.strftime("%d.%m.%Y %H:%M") }}
+Дякуємо за покупку!

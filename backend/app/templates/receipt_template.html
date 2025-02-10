@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Чек</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            width: {{ width }}ch;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #000;
+        }
+        .center {
+            text-align: center;
+        }
+        .divider {
+            border-top: 1px dashed #000;
+            margin: 10px 0;
+        }
+        .sub-divider {
+            border-top: 1px dotted #000;
+            margin: 5px 0;
+        }
+        .right {
+            text-align: right;
+        }
+        .bold {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="center bold">{{ shop_name }}</div>
+    <div class="divider"></div>
+    <div class="center">ЧЕК №{{ invoice.serial_number }}</div>
+    <div class="divider"></div>
+    {% for product in products %}
+        <div>{{ product.stock }} x {{ product.price }} = {{ product.stock * product.price }}</div>
+        <div>{{ product.title }}</div>
+        <div class="sub-divider"></div>
+    {% endfor %}
+    <div class="divider"></div>
+    <div class="right bold">СУМА: {{ total_products_amount }}</div>
+    {% if invoice.payment %}
+        <div class="right">{{ invoice.payment.type }}: {{ invoice.total_amount }}</div>
+    {% endif %}
+    <div class="right">РЕШТА: {{ rest }}</div>
+    <div class="divider"></div>
+    <div class="center">{{ invoice.date_of_issue.strftime("%d.%m.%Y %H:%M") }}</div>
+    <div class="center">Дякуємо за покупку!</div>
+</body>
+</html>
