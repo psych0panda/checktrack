@@ -69,7 +69,7 @@ def read_invoices(
 
     # Если пользователь не суперюзер – фильтруем по owner_id
     if not current_user.is_superuser:
-        filters.append(Invoice.owner_id == current_user.id)
+        filters.append(Invoice.user_id == current_user.id)
 
     # Если фильтр по типу оплаты задан, выполняем join с Payment
     if payment_type:
@@ -107,7 +107,7 @@ def read_invoice(session: SessionDep, current_user: CurrentUser, id: uuid.UUID) 
     invoice = session.get(Invoice, id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    if not current_user.is_superuser and (invoice.owner_id != current_user.id):
+    if not current_user.is_superuser and (invoice.user_id != current_user.id):
         raise HTTPException(status_code=400, detail="Not enough permissions")
     return invoice
 
@@ -195,7 +195,7 @@ def delete_invoice(
     invoice = session.get(Invoice, id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    if not current_user.is_superuser and (invoice.owner_id != current_user.id):
+    if not current_user.is_superuser and (invoice.user_id != current_user.id):
         raise HTTPException(status_code=400, detail="Not enough permissions")
     session.delete(invoice)
     session.commit()
